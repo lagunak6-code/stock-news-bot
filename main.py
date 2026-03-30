@@ -11,18 +11,17 @@ from email.mime.image import MIMEImage
 from datetime import datetime
 import re
 
-# --- [1. 깃허브 Secrets 설정] ---
+# 1. 깃허브 환경변수 설정
 NAVER_CLIENT_ID = os.environ.get('NAVER_ID')
 NAVER_CLIENT_SECRET = os.environ.get('NAVER_SECRET')
 NAVER_USER = os.environ.get('NAVER_USER')
 NAVER_PW = os.environ.get('NAVER_PW')
-# RECIPIENTS는 ["abc@gmail.com"] 형태의 문자열이므로 리스트로 변환
 try:
     RECIPIENTS = eval(os.environ.get('RECIPIENTS'))
 except:
     RECIPIENTS = [os.environ.get('RECIPIENTS')]
 
-# --- [2. 폰트 및 관심 종목 설정] ---
+# 2. 폰트 및 종목 설정
 font_path = '/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf'
 font_prop = fm.FontProperties(fname=font_path)
 plt.rc('font', family='NanumBarunGothic')
@@ -39,11 +38,8 @@ target_stocks = {
     "테슬라": "TSLA"
 }
 
-# --- [3. 핵심 기능 함수들] ---
-
 def clean_html(text):
-    clean = re.sub('<.*?>', '', text)
-    return clean.replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+    return re.sub('<.*?>', '', text).replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
 
 def get_exchange_rate():
     try:
@@ -59,18 +55,16 @@ def create_upgraded_chart(name, ticker, hist, diff):
     if not is_kr: chart_color = 'forestgreen' if diff >= 0 else 'crimson'
     
     hist['MA5'] = hist['Close'].rolling(window=5).mean()
-    
     plt.style.use('seaborn-v0_8-whitegrid')
     fig, ax = plt.subplots(figsize=(10, 5))
-
     ax.plot(hist.index, hist['Close'], color=chart_color, linewidth=2.5, label='종가')
     ax.fill_between(hist.index, hist['Close'], hist['Close'].min()*0.99, color=chart_color, alpha=0.1)
-    ax.plot(hist.index, hist['MA5'], color='darkorange', linestyle='--', linewidth=1.5, label='5일 이평선')
-
-    # 수치 표시 (주 2일 단위이므로 모든 점 표시해도 깔끔함)
-    for i in range(len(hist)):
+    
+    # 주요 지점 가격 표시
+    interval = 5
+    for i in range(0, len(hist), interval):
         ax.text(hist.index[i], hist['Close'].iloc[i], f"{hist['Close'].iloc[i]:,.0f}", 
-                fontproperties=font_prop, fontsize=8, ha='center', va='bottom')
+                fontproperties=font_prop, fontsize=9, ha='center', va='bottom')
 
     ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
@@ -87,14 +81,12 @@ def get_stock_details(name, ticker):
     stock = yf.Ticker(ticker)
     hist = stock.history(period="1mo")
     if hist.empty: return f"📊 <b>{name}</b>: 데이터 없음<br>", None
-    
     curr = hist['Close'].iloc[-1]
     prev = hist['Close'].iloc[-2]
     diff, pct = curr - prev, ((curr - prev) / prev) * 100
     info = stock.info
     cap_val = info.get('marketCap', 0) / (10**12 if ".K" in ticker else 10**9)
     img_path = create_upgraded_chart(name, ticker, hist, diff)
-
     report = f"<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>"
     report += f"📊 <b>{name} ({ticker})</b><br>"
     report += f"현재가: {curr:,.2f} ({diff:+,.2f}, {pct:+.2f}%)<br>시총: {cap_val:,.1f} / PER: {info.get('trailingPE','N/A')}</div>"
@@ -111,16 +103,12 @@ def get_detailed_news(name):
         return news_html + "<br>"
     except: return "뉴스 로드 실패<br>"
 
-# --- [4. 실행 및 메일 발송] ---
 def send_report():
     msg = MIMEMultipart('related')
     msg['Subject'] = f"📈 [자동리포트] {datetime.now().strftime('%Y-%m-%d')} 투자 요약"
     msg['From'] = NAVER_USER
     msg['To'] = ", ".join(RECIPIENTS)
-
-    content_html = f"<h2>📅 {datetime.now().strftime('%Y-%m-%d')} 주식 브리핑</h2>"
-    content_html += f"<p>{get_exchange_rate()}</p><hr>"
-    
+    content_html = f"<h2>📅 {datetime.now().strftime('%Y-%m-%d')} 주식 브리핑</h2><p>{get_exchange_rate()}</p><hr>"
     img_attachments = []
     for name, ticker in target_stocks.items():
         text, img_path = get_stock_details(name, ticker)
@@ -129,19 +117,16 @@ def send_report():
         if img_path:
             content_html += f'<img src="cid:{ticker}"><br><hr>'
             img_attachments.append((img_path, ticker))
-
     msg.attach(MIMEText(content_html, 'html'))
-
     for img_path, cid in img_attachments:
         with open(img_path, 'rb') as f:
             img = MIMEImage(f.read())
             img.add_header('Content-ID', f'<{cid}>')
             msg.attach(img)
-
     with smtplib.SMTP_SSL('smtp.naver.com', 465) as server:
         server.login(NAVER_USER, NAVER_PW)
         server.send_message(msg)
 
-# 파일 맨 아래에 이 내용이 반드시 있어야 합니다!
+# 이 부분이 반드시 맨 왼쪽 끝에 있어야 합니다!
 if __name__ == "__main__":
-    send_report()  # 또는 작성하신 메일 발송 함수 이름
+    send_report()
