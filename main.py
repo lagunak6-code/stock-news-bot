@@ -130,4 +130,4 @@ def send_report():
 
 # 이 부분이 반드시 맨 왼쪽 끝에 있어야 합니다!
 if __name__ == "__main__":
-    send_report()
+ send_report()
