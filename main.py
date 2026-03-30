@@ -142,5 +142,6 @@ def send_report():
         server.login(NAVER_USER, NAVER_PW)
         server.send_message(msg)
 
+# 파일 맨 아래에 이 내용이 반드시 있어야 합니다!
 if __name__ == "__main__":
-    send_report()
+    send_report()  # 또는 작성하신 메일 발송 함수 이름
